@@ -108,6 +108,7 @@ def from_pf(dict_net, pv_as_slack=True, pf_variable_p_loads='plini', pf_variable
                                 pf_variable_p_gen=pf_variable_p_gen, dict_net=dict_net, is_unbalanced=is_unbalanced)
         except RuntimeError as err:
             logger.debug('sgen failed at import and was not imported: %s' % err)
+            Test = 1
     if n > 0: logger.info('imported %d static generators' % n)
 
     logger.debug('creating pv generators as static generators')
