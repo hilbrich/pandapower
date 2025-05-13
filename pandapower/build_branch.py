@@ -509,7 +509,7 @@ def _wye_delta(r, x, g, b, r_ratio, x_ratio):
     tidx = (g != 0) | (b != 0)
     za_star = r[tidx] * r_ratio[tidx] + x[tidx] * x_ratio[tidx] * 1j
     zb_star = r[tidx] * (1 - r_ratio[tidx]) + x[tidx] * (1 - x_ratio[tidx]) * 1j
-    zc_star = 1 / (g + 1j*b)[tidx]
+    zc_star = 1 / (g + 1j * b)[tidx]
     zSum_triangle = za_star * zb_star + za_star * zc_star + zb_star * zc_star
     zab_triangle = zSum_triangle / zc_star
     zac_triangle = zSum_triangle / zb_star
@@ -542,17 +542,17 @@ def _calc_y_from_dataframe(mode, trafo_df, vn_lv, vn_trafo_lv, net_sn_mva):
         the form (-b_img, -b_real)
     """
 
-    baseZ = np.square(vn_lv) / (3*net_sn_mva) if mode == 'pf_3ph' else np.square(vn_lv) / net_sn_mva
+    baseZ = np.square(vn_lv) / (3 * net_sn_mva) if mode == 'pf_3ph' else np.square(vn_lv) / net_sn_mva
     vn_lv_kv = get_trafo_values(trafo_df, "vn_lv_kv")
-    pfe_mw = (get_trafo_values(trafo_df, "pfe_kw") * 1e-3) / 3 if mode == 'pf_3ph'\
+    pfe_mw = (get_trafo_values(trafo_df, "pfe_kw") * 1e-3) / 3 if mode == 'pf_3ph' \
         else get_trafo_values(trafo_df, "pfe_kw") * 1e-3
     parallel = get_trafo_values(trafo_df, "parallel")
     trafo_sn_mva = get_trafo_values(trafo_df, "sn_mva")
 
     ### Calculate susceptance ###
-    vnl_squared = (vn_lv_kv ** 2)/3 if mode == 'pf_3ph' else vn_lv_kv ** 2
+    vnl_squared = (vn_lv_kv ** 2) / 3 if mode == 'pf_3ph' else vn_lv_kv ** 2
     g_mva = pfe_mw
-    i0 = get_trafo_values(trafo_df, "i0_percent") / 3 if mode == 'pf_3ph'\
+    i0 = get_trafo_values(trafo_df, "i0_percent") / 3 if mode == 'pf_3ph' \
         else get_trafo_values(trafo_df, "i0_percent")
 
     ym_mva = i0 / 100 * trafo_sn_mva
@@ -657,7 +657,7 @@ def _calc_tap_from_dataframe(net, trafo_df):
                         count_index = 0
                         for i in range(len(mask)):
                             if relevant_tap_at_star_point[i]:
-                                ratio[count_index] = 1/ratio[count_index]  # Invertieren des Wertes
+                                ratio[count_index] = 1 / ratio[count_index]  # Invertieren des Wertes
                                 shift[count_index] = -shift[count_index]
                             if mask[i]:  # Increase index if mask[i] is True
                                 count_index += 1
@@ -684,13 +684,33 @@ def _calc_tap_from_dataframe(net, trafo_df):
                                                                   tap_step_percent[mask_ideal] / 100 / 2)))
                         )
                     if any(mask_complex):
-                        tap_steps = tap_step_percent[mask_complex] * tap_diff[mask_complex] / 100
-                        tap_angles = _replace_nan(tap_step_degree[mask_complex])
-                        u1 = vn[mask_complex]
-                        du = u1 * _replace_nan(tap_steps)
-                        vn[mask_complex] = np.sqrt((u1 + du * cos(tap_angles)) ** 2 + (du * sin(tap_angles)) ** 2)
-                        trafo_shift[mask_complex] += (arctan(direction * du * sin(tap_angles) /
-                                                      (u1 + du * cos(tap_angles))))
+                        mask_symmetrical = mask_complex & (tap_changer_type == "Symmetrical")
+                        mask_complex = mask_complex & ~mask_symmetrical
+                        if any(mask_symmetrical):
+                            tap_steps = tap_step_percent[mask_symmetrical] * tap_diff[mask_symmetrical] / 100
+                            tap_angles = _replace_nan(tap_step_degree[mask_symmetrical])
+                            if side == "hv":
+                                t_hv = 1 - tap_steps / 2 * (cos(tap_angles) + 1j * sin(tap_angles))
+                                t_lv = 1 + tap_steps / 2 * (cos(tap_angles) + 1j * sin(tap_angles))
+                                vnl[mask_symmetrical] = abs(t_lv) * vnl[mask_symmetrical]
+                                vnh[mask_symmetrical] = abs(t_hv) * vnh[mask_symmetrical]
+                                trafo_shift[mask_symmetrical] += (math.atan2(t_lv.imag, t_lv.real)
+                                                                  - math.atan2(t_hv.imag, t_hv.real)) / math.pi * 180
+                            else:
+                                t_lv = 1 + tap_steps / 2 * (cos(tap_angles) + 1j * sin(tap_angles))
+                                t_hv = 1 - tap_steps / 2 * (cos(tap_angles) + 1j * sin(tap_angles))
+                                vnl[mask_symmetrical] = abs(t_lv) * vnl[mask_symmetrical]
+                                vnh[mask_symmetrical] = abs(t_hv) * vnh[mask_symmetrical]
+                                trafo_shift[mask_symmetrical] += (math.atan2(t_hv.imag, t_hv.real)
+                                                                  - math.atan2(t_lv.imag, t_lv.real)) / math.pi * 180
+                        if any(mask_complex):
+                            tap_steps = tap_step_percent[mask_complex] * tap_diff[mask_complex] / 100
+                            tap_angles = _replace_nan(tap_step_degree[mask_complex])
+                            u1 = vn[mask_complex]
+                            du = u1 * _replace_nan(tap_steps)
+                            vn[mask_complex] = np.sqrt((u1 + du * cos(tap_angles)) ** 2 + (du * sin(tap_angles)) ** 2)
+                            trafo_shift[mask_complex] += (arctan(direction * du * sin(tap_angles) /
+                                                                 (u1 + du * cos(tap_angles))))
         elif f'tap{t}_phase_shifter' in trafo_df:
             warnings.warn(DeprecationWarning("tap{t}_phase_shifter was removed with pandapower 3.0 and replaced by "
                                              "tap{t}_changer_type. Using old net data will still work, but usage of "
@@ -700,7 +720,7 @@ def _calc_tap_from_dataframe(net, trafo_df):
             for side, vn, direction in [("hv", vnh, 1), ("lv", vnl, -1)]:
                 tap_ideal = tap_phase_shifter & (tap_side == side)
                 tap_complex = np.isfinite(tap_step_percent) & np.isfinite(tap_pos) & (tap_side == side) & \
-                    ~tap_ideal
+                              ~tap_ideal
                 if tap_complex.any():
                     tap_steps = tap_step_percent[tap_complex] * tap_diff[tap_complex] / 100
                     tap_angles = _replace_nan(tap_step_degree[tap_complex])
@@ -814,7 +834,7 @@ def _get_vk_values(trafo_df, characteristic, trafotype="2W"):
         char_columns = [v for v in vk_variables if f"{v}_characteristic" in all_columns]
         if len(char_columns) == 0:
             raise UserWarning(f"At least one of the columns for characteristics "
-                              f"({[v+'_characteristic' for v in vk_variables]}) "
+                              f"({[v + '_characteristic' for v in vk_variables]}) "
                               f"must be defined for {trafotype} trafo")
         # must cast to float64 unfortunately, because numpy.vstack casts arrays to object
         # because it doesn't know pandas.NA, np.isnan fails
@@ -848,6 +868,7 @@ def _calc_tap_dependent_value(tap_pos, value, tap_dependent_impedance, character
     relevant_idx = tap_dependent_impedance & ~np.isnan(characteristic_idx)
     vk_characteristic = np.zeros_like(tap_dependent_impedance, dtype="object")
     vk_characteristic[relevant_idx] = characteristic.loc[characteristic_idx[relevant_idx], 'object'].values
+
     # here dtype must be float otherwise the load flow calculation will fail
 
     def custom_func(f, t, c):
@@ -925,7 +946,7 @@ def _calc_nominal_ratio_from_dataframe(ppc, trafo_df, vn_hv_kv, vn_lv_kv, bus_lo
     hv_bus = get_trafo_values(trafo_df, "hv_bus")
     lv_bus = get_trafo_values(trafo_df, "lv_bus")
     nom_rat = get_values(ppc["bus"][:, BASE_KV], hv_bus, bus_lookup) / \
-        get_values(ppc["bus"][:, BASE_KV], lv_bus, bus_lookup)
+              get_values(ppc["bus"][:, BASE_KV], lv_bus, bus_lookup)
     return tap_rat / nom_rat
 
 
@@ -1025,7 +1046,7 @@ def _calc_xward_parameter(net, ppc):
     f, t = net["_pd2ppc_lookups"]["branch"]["xward"]
     branch = ppc["branch"]
     baseR = np.square(get_values(ppc["bus"][:, BASE_KV], net["xward"]["bus"].values, bus_lookup)) / \
-        net.sn_mva
+            net.sn_mva
     xw_is = net["_is_elements"]["xward"]
     branch[f:t, F_BUS] = bus_lookup[net["xward"]["bus"].values]
     branch[f:t, T_BUS] = bus_lookup[net._pd2ppc_lookups["aux"]["xward"]]
@@ -1112,7 +1133,7 @@ def _switch_branches(net, ppc):
                     else:
                         opposite_side = T_BUS if side == F_BUS else F_BUS
                         opposite_buses = ppc["branch"][sw_branch_index[mask],
-                                                       opposite_side].real.astype(np.int64)
+                        opposite_side].real.astype(np.int64)
                         if col == VM:
                             taps = ppc["branch"][sw_branch_index[mask], TAP].real
                             init_values = ppc["bus"][opposite_buses, col] * taps
@@ -1380,7 +1401,7 @@ def _trafo_df_from_trafo3w(net, sequence=1):
         if mode != "sc":
             raise NotImplementedError(
                 "0 seq impedance calculation only implemented for short-circuit calculation!")
-        _calculate_sc_voltages_of_equivalent_transformers_zero_sequence(t3, trafo2,)
+        _calculate_sc_voltages_of_equivalent_transformers_zero_sequence(t3, trafo2, )
     else:
         raise UserWarning("Unsupported sequence for trafo3w convertion")
     _calculate_3w_tap_changers(t3, trafo2, sides)
@@ -1524,7 +1545,7 @@ def _calculate_3w_tap_changers(t3, t2, sides):
                  np.exp(1j * np.deg2rad(tap_arrays["tap_step_degree"][side][mask_star_point])))
             tap_pos = tap_arrays["tap_pos"][side][mask_star_point]
             tap_neutral = tap_arrays["tap_neutral"][side][mask_star_point]
-            t_corrected = 100 * t / (100 + (t * (tap_pos-tap_neutral)))
+            t_corrected = 100 * t / (100 + (t * (tap_pos - tap_neutral)))
             tap_arrays["tap_step_percent"][side][mask_star_point] = np.abs(t_corrected)
             tap_arrays["tap_side"][side][mask_star_point] = "lv" if side == "hv" else "hv"
             tap_arrays["tap_step_degree"][side][mask_star_point] = np.rad2deg(np.angle(t_corrected))
