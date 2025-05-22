@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import inv
+#from scipy.linalg import inv
 
 #from pandapower.auxiliary import get_indices
 #from pandapower.create import create_empty_network
@@ -25,8 +26,8 @@ logger = logging.getLogger(__name__)
 
 def calc_sens_matrix(net):
     #print("success!")
-    J=net._ppc['internal']['J']
-    sensitivity_matrix_ppc = inv(J)
+    J = net._ppc['internal']['J']
+    sensitivity_matrix_ppc = inv(J.tocsc())
     pandapower_bus_idx = net.bus.index
     ppc_index = net._pd2ppc_lookups["bus"][pandapower_bus_idx]
     int_idx = net._pd2ppc_lookups["bus"][ppc_index]
