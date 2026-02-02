@@ -1,9 +1,23 @@
 Change Log
 =============
 
-[upcoming release] - 2025-..-..
+[upcoming release] - 2026-..-..
 -------------------------------
+- [FIXED] cim2pp: prevent crash with comments in xml, by dropping them via library
+- [FIXED] cim2pp: ACLineSegments with invalid terminals no longer cause all valid lines to be discarded
 - [FIXED] pf2pp: create_switch removed and create_vsc fixed (changed to create_pp_vsc)
+- [ADDED] rundcpp: Added DC elements to DC powerflow
+- [ADDED] python: support for version 3.14 added to the test pipelines
+- [ADDED] Station Controller support for power factor control and tangens control
+- [CHANGED] attribute voltage_ctrl in Station Controller to control_modus to select new control modi. Changed the type from boolean to enum class
+
+[3.3.2] - 2026-01-13
+-------------------------------
+- [FIXED] fixing the scipy version to <1.16 since python 3.10 is only compatible with scipy 1.15
+
+[3.3.1] - 2026-01-13
+-------------------------------
+- [FIXED] short circuit calculation failed, bug in scipy did calculate zbus = inv(ybus) incorrectly.
 
 [3.3.0] - 2025-12-15
 -------------------------------

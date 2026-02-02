@@ -41,6 +41,7 @@ def convert_format(net, elements_to_deserialize=None, drop_invalid_geodata=False
     if Version(str(net.format_version)) < Version("3.1.0"):
         _convert_q_capability_characteristic(net)
     if Version("3.0.0") <= Version(str(net.format_version)) < Version("3.1.3"):
+        _update_station_controller(net)
         _replace_invalid_data(net, elements_to_deserialize, drop_invalid_geodata)
     if Version(str(net.format_version)) < Version("3.0.0"):
         _convert_geo_data(net, elements_to_deserialize, drop_invalid_geodata)
@@ -632,10 +633,11 @@ def _update_object_attributes(obj):
             obj.__dict__["hunting_limit"] = None
     elif isinstance(obj, BinarySearchControl):
         if "output_adjustable" not in obj.__dict__:
-            obj.__dict__["output_adjustable"] = np.array([False if not distribution else service
-                                            for distribution, service in zip(obj.output_values_distribution,
-                                                                            obj.output_element_in_service)],
-                                            dtype=np.bool)
+            obj.__dict__["output_adjustable"] = np.array([
+                False if not distribution else service for distribution, service in zip(
+                    obj.output_values_distribution, obj.output_element_in_service
+                )
+            ], dtype=bool)
         if "output_max_q_mvar" not in obj.__dict__:
             obj.__dict__["output_max_q_mvar"] = np.array([np.inf]*len(obj.output_element_index), dtype=np.float64)
         if "output_min_q_mvar" not in obj.__dict__:
@@ -689,6 +691,13 @@ def _update_characteristics(net, elements_to_deserialize):
             continue
         c.interpolator_kind = "interp1d"
         c.kwargs = {"kind": c.__dict__.pop("kind"), "bounds_error": False, "fill_value": c.__dict__.pop("fill_value")}
+
+
+def _update_station_controller(net):
+    # update net to be able to run in finalized station controller
+    for controller_attr in net.controller.object.values:
+        if hasattr(controller_attr, "control_modus") and controller_attr.control_modus == "tan(phi)_ctrl":
+            controller_attr.control_modus = "tan_phi_ctrl"
 
 
 def convert_trafo_pst_logic(net):

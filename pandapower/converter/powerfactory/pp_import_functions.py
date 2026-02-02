@@ -353,7 +353,7 @@ def from_pf(
                 min_q_mvar, max_q_mvar = get_min_max_q_mvar_from_characteristics_object(net, element, eid)
                 net[element].loc[eid, 'min_q_mvar'] = min_q_mvar
                 net[element].loc[eid, 'max_q_mvar'] = max_q_mvar
-                
+
     if export_pf_ZoneArea:
         if "pf_zone" not in net.bus.columns:
             net.bus["pf_zone"] = None
@@ -2128,21 +2128,17 @@ def create_sgen_genstat(net, item, pv_as_slack, pf_variable_p_gen, dict_net, is_
         # create...
         pstac = item.c_pstac  # None if station controller is not available
         if pstac is not None and not pstac.outserv and export_ctrl:
-            if pstac.i_droop:
-                av_mode = 'constq'
+            if pstac.i_droop and pstac.i_ctrl == 0:
+                av_mode = 'constq'#'constq'
             else:
                 if pstac.i_ctrl == 0:
-                    av_mode = 'constq'
+                    av_mode = 'constq'#'constq'
                 elif pstac.i_ctrl == 1:
                     av_mode = 'constq'
                 elif pstac.i_ctrl == 2:
-                    av_mode = 'cosphi'
-                    logger.error('Error! av_mode cosphi not implemented')
-                    return
+                    av_mode='constq' #other devices
                 elif pstac.i_ctrl == 3:
-                    av_mode = 'tanphi'
-                    logger.error('Error! av_mode tanphi not implemented')
-                    return
+                    av_mode='constq' #implementing other devices?
                 else:
                     logger.error('Error! av_mode undefined')
                     return
@@ -2174,7 +2170,7 @@ def create_sgen_genstat(net, item, pv_as_slack, pf_variable_p_gen, dict_net, is_
                                               output_values_distribution=[1],
                                               input_element="res_gen", input_variable="q_mvar",
                                               input_inverted=[False], input_element_index=[next_index],
-                                              set_point=item.usetp, voltage_ctrl=True, bus_idx=bus, tol=1e-5)
+                                              set_point=item.usetp, control_modus = "V_ctrl_Q_droop_local", bus_idx=bus, tol=1e-5)
                     VDroopControl_local(net, name=item.loc_name + "_ctrl", q_droop_mvar=item.sgn * 100 / ddroop,
                                         q_set_mvar=item.qgini, vm_set_pu_bsc=item.usetp, bus_idx=bus,
                                         controller_idx=bsc.index)
@@ -2193,6 +2189,7 @@ def create_sgen_genstat(net, item, pv_as_slack, pf_variable_p_gen, dict_net, is_
                 sg = create_asymmetric_sgen(net, **params)
                 element = "asymmetric_sgen"
             else:
+                # add reactive and active power limits
                 if pstac is not None and not pstac.outserv and export_ctrl:
                     try:
                         params['q_mvar'] = item.GetAttribute('m:Q:bus1')
@@ -2408,21 +2405,17 @@ def create_sgen_sym(net, item, pv_as_slack, pf_variable_p_gen, dict_net, export_
         # None if station controller is not available
         if pstac is not None and not pstac.outserv and export_ctrl:
             if pstac.i_droop:
-                av_mode = 'constq'
+                av_mode = 'constq'#'constq'
             else:
                 i_ctrl = pstac.i_ctrl
                 if i_ctrl == 0:
-                    av_mode = 'constq'
+                    av_mode = 'constq'#'constq'
                 elif i_ctrl == 1:
                     av_mode = 'constq'
                 elif i_ctrl == 2:
-                    av_mode = 'cosphi'
-                    logger.error('Error! avmode cosphi not implemented')
-                    return
+                    av_mode='constq'
                 elif i_ctrl == 3:
-                    av_mode = 'tanphi'
-                    logger.error('Error! avmode tanphi not implemented')
-                    return
+                    av_mode= 'constq'
 
         logger.debug('av_mode: %s' % av_mode)
         if av_mode == 'constv':
@@ -4071,7 +4064,11 @@ def create_pp_vsc(net, item):
         net.res_vsc.loc[vid_2, ["pf_p_mw", "pf_q_mvar", "pf_p_dc_mw"]] = np.nan
 
 
-def create_stactrl(net, item, top, top_all):
+def create_stactrl(net, item, top, top_all, **kwargs):
+    #if 'bus_dict_Elm_Term' in kwargs:
+    #    bus_dict_stactrl = kwargs.get('bus_dict_Elm_Term')
+    #else:
+    #    bus_dict_stactrl = None
     stactrl_in_service = True
     logger.info(f"Creating Station Controller {item.loc_name}")
     if item.outserv:
@@ -4114,14 +4111,20 @@ def create_stactrl(net, item, top, top_all):
 
     # Overwrite gen_type if local control differs from station controller type
     if control_mode is not None:
-        if item.i_droop:
+        if item.i_droop and control_mode == 0:
             for i in range(len(gen_types)):
                 gen_types[i] = "sgen"
         else:
-            if control_mode == 0: # voltage control
+            if control_mode == 0: #V_ctrl
                 for i in range(len(gen_types)):
                     gen_types[i] = "sgen"
-            elif control_mode == 1: # reactive power control
+            elif control_mode == 1: #Q_ctrl
+                for i in range(len(gen_types)):
+                    gen_types[i] = "sgen"
+            elif control_mode == 2: #PF
+                for i in range(len(gen_types)):
+                    gen_types[i] = "sgen"
+            elif control_mode == 3: #tan(phi)
                 for i in range(len(gen_types)):
                     gen_types[i] = "sgen"
             else:
@@ -4133,8 +4136,7 @@ def create_stactrl(net, item, top, top_all):
 
     gen_element = gen_types[0]
     gen_element_index = []
-
-    if duplicated_sgen_names == False:
+    if not duplicated_sgen_names:
         for s in machines:
             gen_element_index.append(net[gen_element].loc[net[gen_element].name == s.loc_name].index.values[0])
     else:
@@ -4183,9 +4185,18 @@ def create_stactrl(net, item, top, top_all):
     variable = None
     res_element_table = None
     res_element_index = None
-
-    if control_mode == 1 or item.i_droop:
-        q_control_cubicle = item.p_cub if control_mode == 1 else item.pQmeas  # Feld
+    # Create nx graph for further usage
+    # top is needed to check connectivity between inpout and output elements, therefore respect switches
+    # top_all is the full topology to identify the sign of measurements, that is why respect_switches = False
+    #top = create_nxgraph(net, respect_switches=True, include_lines=True, include_trafos=True,
+    #                     include_impedances=True, nogobuses=None, notravbuses=None, multi=True,
+    #                     calc_branch_impedances=False, branch_impedance_unit='ohm')
+    #top_all = create_nxgraph(net, respect_switches=False, include_lines=True, include_trafos=True,
+    #                         include_impedances=True, nogobuses=None, notravbuses=None, multi=True,
+    #                         calc_branch_impedances=False, branch_impedance_unit='ohm')
+    if control_mode >= 1 or item.i_droop: #droop control
+        #q_control_cubicle = item.p_cub if control_mode == 1 else item.pQmeas #Feld #pqmeas if V_ctrl and droop
+        q_control_cubicle = item.p_cub if control_mode != 0 else item.pQmeas  #item.p_cub if other mode and droop?
         if q_control_cubicle is None:
             logger.info(f"Input Element of Controller {item.loc_name} is missing, skipping")
             return
@@ -4309,7 +4320,8 @@ def create_stactrl(net, item, top, top_all):
             logger.error(
                 f"{item}: only line, impedance, trafo 2W/3W element and switch flows can be controlled, {element_class[0]=}")
             return
-    elif control_mode == 0:
+    #elif control_mode == 0:
+    else:
         res_element_table = "res_bus"
     input_busses = []
     output_busses = []
@@ -4339,18 +4351,24 @@ def create_stactrl(net, item, top, top_all):
     for n in range(len(input_busses)):
         for m in range(len(output_busses)):
             has_path = has_path or nx.has_path(top, input_busses[n], output_busses[m])
-    if not has_path and not control_mode == 0 and not item.i_droop:
+    if not has_path and control_mode != 0 and not item.i_droop:
+        if control_mode ==1: control_modus = "Q"
+        elif control_mode == 2: control_modus = 'Power_factor'
+        else: control_modus = 'tangens'
+        logger.error(f'no path found, skipping {control_modus} controller')
         return
 
     if control_mode == 0:  # VOLTAGE CONTROL
-        # controlled_node = item.rembar
-        controlled_node = item.cpCtrlNode
-        bus = bus_dict[controlled_node]  # controlled node
-
-        if item.uset_mode == 0:  # Station controller
-            v_setpoint_pu = item.usetp
+        # Controlled Node: User selection vs Automatic selection  # User selection
+        if item.selBus == 0:
+            controlled_node = item.rembar
+            bus = bus_dict[controlled_node]  # controlled node
+            if item.uset_mode == 0:  # Station controller
+                v_setpoint_pu = item.usetp
+            else:
+                v_setpoint_pu = item.cpCtrlNode.vtarget  # Bus target voltage, not always the same as item.rembar
         else:
-            v_setpoint_pu = controlled_node.vtarget  # Bus target voltage
+            raise NotImplementedError(f"{item}: controlled node selection {item.selBus} not implemented")
 
         if item.i_droop:  # Enable Droop
             bsc = BinarySearchControl(net,
@@ -4366,13 +4384,13 @@ def create_stactrl(net, item, top, top_all):
                                       input_inverted=input_inverted,
                                       input_element_index=res_element_index,
                                       set_point=v_setpoint_pu,
-                                      voltage_ctrl=True,
+                                      control_modus='V_ctrl_Q_droop',
                                       bus_idx=bus,
-                                      tol=1e-3,
+                                      tol=1e-6,
                                       machines=[machine_obj.loc_name for machine_obj in item.psym])
             net.controller.loc[max(net.controller.index), 'name'] = item.loc_name
             DroopControl(net, name=item.loc_name, q_droop_mvar=item.Srated * 100 / item.ddroop, bus_idx=bus,
-                         vm_set_pu_bsc=v_setpoint_pu, controller_idx=bsc.index, voltage_ctrl=True)
+                         vm_set_pu_bsc=v_setpoint_pu, controller_idx=bsc.index, control_modus="V_ctrl_Q_droop")
             net.controller.loc[max(net.controller.index), 'name'] = item.loc_name
         else:
             BinarySearchControl(net,
@@ -4388,7 +4406,7 @@ def create_stactrl(net, item, top, top_all):
                                input_inverted=input_inverted,
                                input_element_index=bus,
                                set_point=v_setpoint_pu,
-                               voltage_ctrl=True,
+                               control_modus='V_ctrl',
                                damping_factor=0.9,
                                tol=1e-6,
                                machines=[machine_obj.loc_name for machine_obj in item.psym])
@@ -4415,7 +4433,7 @@ def create_stactrl(net, item, top, top_all):
                 input_inverted=input_inverted,
                 input_element_index=res_element_index,
                 set_point=item.qsetp,
-                voltage_ctrl=False,
+                control_modus= 'Q_ctrl',
                 damping_factor=0.9,
                 tol=1e-6,
                 machines=[machine_obj.loc_name for machine_obj in item.psym])
@@ -4436,7 +4454,7 @@ def create_stactrl(net, item, top, top_all):
                 input_inverted=input_inverted,
                 input_element_index=res_element_index,
                 set_point=item.qsetp,
-                voltage_ctrl=False,
+                control_modus='Q_ctrl_V_droop',
                 bus_idx=bus,
                 damping_factor=0.9,
                 tol=1e-6,
@@ -4453,9 +4471,56 @@ def create_stactrl(net, item, top, top_all):
                 vm_set_lb=item.udeadblow,
                 q_set_mvar_bsc=item.qsetp,
                 controller_idx=bsc.index,
-                voltage_ctrl=False, machines=[machine_obj.loc_name for machine_obj in item.psym])
+                control_modus="Q_ctrl_V_droop", machines=[machine_obj.loc_name for machine_obj in item.psym])
         else:
             raise NotImplementedError
+    elif control_mode==2:#PF_Control
+        if item.iQorient != 0:
+            if not stactrl_in_service:
+                return
+            raise NotImplementedError(f"{item}: Q orientation '-' not supported")
+        if item.cosphi_char == 0:
+            if item.pf_recap == 0: #0 -> inductive, 1 -> capacitive
+                control_modus = 'PF_ctrl_ind'
+            else:
+                if item.pf_recap != 1:
+                    logger.error('Powerfactor without specified reactance\nassuming capacitive system\n')
+                control_modus = 'PF_ctrl_cap'
+            BinarySearchControl(
+                net, ctrl_in_service=stactrl_in_service,
+                output_element=gen_element,
+                output_variable="q_mvar",
+                output_element_index=gen_element_index,
+                output_element_in_service=gen_element_in_service,
+                input_element=res_element_table,
+                output_values_distribution=distribution,
+                damping_factor=0.9,
+                input_variable=variable,
+                input_element_index=res_element_index,
+                set_point=item.pfsetp,
+                control_modus=control_modus, tol=1e-6,
+                name = item.loc_name
+            )
+    elif control_mode== 3:#tan(phi)_control
+        if item.iQorient != 0:
+            if not stactrl_in_service:
+                return
+            raise NotImplementedError(f"{item}: Q orientation '-' not supported")
+        BinarySearchControl(
+            net, name=item.loc_name, ctrl_in_service=stactrl_in_service,
+            output_element=gen_element,
+            output_variable="q_mvar",
+            output_element_index=gen_element_index,
+            output_element_in_service=gen_element_in_service,
+            input_element=res_element_table,
+            output_values_distribution=distribution,
+            damping_factor=0.9,
+            input_variable=variable,
+            input_element_index=res_element_index,
+            set_point=item.tansetp,
+            input_inverted=input_inverted,
+            control_modus='tan_phi_ctrl', tol=1e-6
+        )
     else:
         raise NotImplementedError(f"{item}: control mode {item.i_ctrl=} not implemented")
 
