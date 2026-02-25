@@ -2862,6 +2862,7 @@ def create_trafo(net, item, export_controller=True, tap_opt="nntap", is_unbalanc
     # adding tap changer
     if (export_controller and pf_type.itapch and item.HasAttribute('ntrcn') and
             item.HasAttribute('i_cont') and item.ntrcn == 1):
+        in_service = not item.outserv
         if item.t2ldc == 0:
             logger.debug('tap controller of trafo <%s> at hv' % name)
             side = 'hv'
@@ -2887,13 +2888,19 @@ def create_trafo(net, item, export_controller=True, tap_opt="nntap", is_unbalanc
                 vm_lower_pu = item.usp_low
                 vm_upper_pu = item.usp_up
             elif item.uset_mode == 1:  # bus voltage setpoint
-                vm_lower_pu = item.cpCtrlNode.vtarget * (1 + item.cpCtrlNode.dvmin / 100)
-                vm_upper_pu = item.cpCtrlNode.vtarget * (1 + item.cpCtrlNode.dvmax / 100)
+                try:
+                    vm_lower_pu = item.cpCtrlNode.vtarget * (1 + item.cpCtrlNode.dvmin / 100)
+                    vm_upper_pu = item.cpCtrlNode.vtarget * (1 + item.cpCtrlNode.dvmax / 100)
+                except AttributeError:
+                    vm_lower_pu = 0.99
+                    vm_upper_pu = 1.01
+                    in_service = False
+                    print("error")
             logger.debug('trafo <%s> has discrete tap controller with '
                          'u_low = %.3f, u_up = %.3f, side = %s' % (name, vm_lower_pu, vm_upper_pu, side))
             try:
                 DiscreteTapControl(net, tid, side=side, vm_lower_pu=vm_lower_pu, vm_upper_pu=vm_upper_pu,
-                                   hunting_limit=hunting_limit)
+                                   hunting_limit=hunting_limit, in_service=in_service)
             except BaseException as err:
                 logger.error('error while creating discrete tap controller at trafo <%s>' % name)
                 logger.error('Error: %s' % err)
@@ -3312,6 +3319,7 @@ def create_trafo3w(net, item, tap_opt='nntap', export_controller=True, hunting_l
     # adding tap changer
     name = item.loc_name
     if (export_controller and item.HasAttribute('ntrcn') and item.HasAttribute('i_cont') and item.ntrcn == 1):
+        in_service = not item.outserv
         if item.t3ldc == 0:
             logger.debug('tap controller of trafo3w <%s> at hv' % name)
             side = 'hv'
@@ -3340,13 +3348,19 @@ def create_trafo3w(net, item, tap_opt='nntap', export_controller=True, hunting_l
                 vm_lower_pu = item.usp_low
                 vm_upper_pu = item.usp_up
             elif item.uset_mode == 1:  # bus voltage setpoint
-                vm_lower_pu = item.cpCtrlNode.vtarget * (1 + item.cpCtrlNode.dvmin / 100)
-                vm_upper_pu = item.cpCtrlNode.vtarget * (1 + item.cpCtrlNode.dvmax / 100)
+                try:
+                    vm_lower_pu = item.cpCtrlNode.vtarget * (1 + item.cpCtrlNode.dvmin / 100)
+                    vm_upper_pu = item.cpCtrlNode.vtarget * (1 + item.cpCtrlNode.dvmax / 100)
+                except AttributeError:
+                    vm_lower_pu = 0.99
+                    vm_upper_pu = 1.01
+                    in_service = False
+                    print("error")
             logger.debug('trafo3w <%s> has discrete tap controller with '
                          'u_low = %.3f, u_up = %.3f, side = %s' % (name, vm_lower_pu, vm_upper_pu, side))
             try:
                 DiscreteTapControl(net, tid, side=side, element="trafo3w", vm_lower_pu=vm_lower_pu, vm_upper_pu=vm_upper_pu,
-                                   hunting_limit=hunting_limit)
+                                   hunting_limit=hunting_limit, in_service=in_service)
             except BaseException as err:
                 logger.error('error while creating discrete tap controller at trafo3w <%s>' % name)
                 logger.error('Error: %s' % err)
